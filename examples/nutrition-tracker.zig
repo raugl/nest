@@ -74,9 +74,11 @@ fn renderFoodTable() !void {
     // own properties, but they all participate in a single sizing resolution. They could use the same
     // id, or use 'sync-[meta-table-id]'
     // TODO: Sticky headers are currently impossible
-    ui.node("id-[table-grid]")
-    ui.node("id-[header] sync-[table-grid] dir-col px-2 py-1 rounded-t-md border-all-1 border-slate-700 bg-gray-300 shadow-md")({
 
+    ui.node("id-[table-grid]")({
+        ui.node("id-[header] dir-col sync-[table-grid] px-2 py-1 rounded-t-md border-all-1 border-slate-700 bg-gray-300 shadow-md")({
+            //
+        });
     });
 
     ui.node("dir-grid col-gap-4 row-gap-2 rounded-md border-all-2 border-slate-400 cols-[repeat(6, grow) fit]")({
