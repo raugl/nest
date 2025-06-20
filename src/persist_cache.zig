@@ -50,9 +50,8 @@ pub fn Cache(conf: CacheConfig) type {
         }
 
         pub fn getOrPut(self: *Self, comptime T: type, base_id: ID, val: T) *T {
-            var hash = std.hash.Wyhash.init(0);
+            var hash = std.hash.Wyhash.init(base_id);
             hash.update(@typeName(T));
-            hash.update(std.mem.asBytes(&base_id));
             const id = hash.final();
 
             return switch (nextPow2(u16, @sizeOf(T))) {
@@ -68,13 +67,7 @@ pub fn Cache(conf: CacheConfig) type {
         }
 
         fn nextPow2(comptime T: type, x: T) T {
-            var v = x -% 1;
-            comptime var i: u8 = 1;
-            inline while (i < @sizeOf(T)) {
-                v |= v >> i;
-                i <<= 1;
-            }
-            return v +% 1;
+            return 1 << @sizeOf(T) - @clz(x);
         }
 
         fn helper(map: anytype, id: ID, val: anytype) *@TypeOf(val) {

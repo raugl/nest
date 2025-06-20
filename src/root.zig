@@ -5,6 +5,7 @@
 /// TODO: implement cursor interactions
 /// TODO: implement the style parser
 /// TODO: think about grid layout
+/// TODO: maybe change sizes/positions from ints to floats
 const std = @import("std");
 pub usingnamespace api;
 
@@ -15,7 +16,7 @@ const api = struct {
         return closeElement;
     }
 
-    pub fn cursor() CursorState {
+    pub fn input() InputState {
         return .{};
     }
 
@@ -375,40 +376,39 @@ pub const Color = struct {
     pub const rose_950 = Color{ .r = 76, .g = 5, .b = 25 };
 };
 
-const CursorState = packed struct {
+const InputState = packed struct {
     enter: bool = false, // The cursor just entered the current element
     leave: bool = false, // The cursor just left the current element
-    inside: bool = false, // The cursor is inside the current element
-    outside: bool = false, // The cursor is outside the current element
-    drag: bool = false, // The currsor is currently dragging something
+    hover: bool = false, // The cursor is inside the current element
     drop: bool = false, // The cursor just dropped something
+    drag: bool = false, // The currsor is currently dragging something
 
-    press_left: bool = false, // Mouse button 1 is being pressed
-    press_right: bool = false, // Mouse button 2 is being pressed
-    press_middle: bool = false, // Mouse button 3 is being pressed
-    press_4: bool = false, // Mouse button 4 is being pressed
-    press_5: bool = false, // Mouse button 5 is being pressed
-    press_6: bool = false, // Mouse button 6 is being pressed
-    press_7: bool = false, // Mouse button 7 is being pressed
-    press_8: bool = false, // Mouse button 8 is being pressed
+    lmb_down: bool = false,
+    rmb_down: bool = false,
+    mmb_down: bool = false,
+    mb4_down: bool = false,
+    mb5_down: bool = false,
+    mb6_down: bool = false,
+    mb7_down: bool = false,
+    mb8_down: bool = false,
 
-    hold_left: bool = false, // Mouse button 1 is being held
-    hold_right: bool = false, // Mouse button 2 is being held
-    hold_middle: bool = false, // Mouse button 3 is being held
-    hold_4: bool = false, // Mouse button 4 is being held
-    hold_5: bool = false, // Mouse button 5 is being held
-    hold_6: bool = false, // Mouse button 6 is being held
-    hold_7: bool = false, // Mouse button 7 is being held
-    hold_8: bool = false, // Mouse button 8 is being held
+    lmb_press: bool = false,
+    rmb_press: bool = false,
+    mmb_press: bool = false,
+    mb4_press: bool = false,
+    mb5_press: bool = false,
+    mb6_press: bool = false,
+    mb7_press: bool = false,
+    mb8_press: bool = false,
 
-    release_left: bool = false, // Mouse button 1 is being released
-    release_right: bool = false, // Mouse button 2 is being released
-    release_middle: bool = false, // Mouse button 3 is being released
-    release_4: bool = false, // Mouse button 4 is being released
-    release_5: bool = false, // Mouse button 5 is being released
-    release_6: bool = false, // Mouse button 6 is being released
-    release_7: bool = false, // Mouse button 7 is being released
-    release_8: bool = false, // Mouse button 8 is being released
+    lmb_release: bool = false,
+    rmb_release: bool = false,
+    mmb_release: bool = false,
+    mb4_release: bool = false,
+    mb5_release: bool = false,
+    mb6_release: bool = false,
+    mb7_release: bool = false,
+    mb8_release: bool = false,
 };
 
 const CursorShape = enum {
@@ -426,35 +426,24 @@ const CursorShape = enum {
     not_allowed,
     all_scroll,
 
-    // Resize: cardinal directions
-    nresize,
-    sresize,
-    eresize,
-    wresize,
+    resize_t,
+    resize_b,
+    resize_l,
+    resize_r,
+    resize_tr,
+    resize_tl,
+    resize_br,
+    resize_bl,
 
-    // Resize: corners
-    neresize,
-    nwresize,
-    seresize,
-    swresize,
-
-    // Resize: logical directions
-    ewresize,
-    nsresize,
-    nesWResize,
-    nwsEResize,
-
-    // Resize: table/grid
-    ColResize,
-    RowResize,
+    resize_x,
+    resize_y,
+    resize_tlbr,
+    resize_trbl,
 };
 
-const LayoutDirection = enum {
-    top_down,
-    left_right,
-};
+const LayoutDirection = enum { col, row };
 
-const ScrollDirection = enum {
+pub const ScrollDirection = enum {
     none,
     vertical,
     horizontal,
@@ -473,19 +462,17 @@ const ChildAlignment = enum {
     bottom_right,
 };
 
-const SizingType = enum {
+const SizingKind = union(enum) {
     fit,
     grow,
-    fixed,
-    percent,
+    fixed: uint,
+    fraction: f32,
 };
 
 const Sizing = struct {
-    type: SizingType = .fit,
-    fixed: Scalar = 0,
-    percent: f32 = 0,
-    min: ?Scalar = null,
-    max: ?Scalar = null,
+    size: SizingKind = .fit,
+    min: SizingKind = .fit,
+    max: SizingKind = .grow,
 };
 
 const Padding = struct {
@@ -564,7 +551,7 @@ const NodeConfig = struct {
     // Extra
     transform: Mat4 = .identity,
     cursor_shape: CursorShape = .default,
-    cursor_capture: CursorState = .{},
+    cursor_capture: InputState = .{},
 };
 
 const TextWrapping = enum {
@@ -663,6 +650,9 @@ const ID = u32;
 const Index = u32;
 const Scalar = i32;
 const Queue = std.fifo.LinearFifo(Index, .Slice);
+
+const int = i32;
+const uint = u32;
 
 const Node = struct {
     parent: Index = 0,
@@ -880,8 +870,331 @@ fn growChildrenVertical(node: Node, queue: *Queue) void {
     }
 }
 
-// TODO
-fn parseElementConfig(comptime str: []const u8) NodeConfig {
-    _ = str;
-    return NodeConfig{};
+fn parseElementConfig(comptime str_: []const u8) NodeConfig {
+    var str_cpy = str_;
+    var conf = NodeConfig{};
+    const rem_to_px = 1.0; // FIXME
+    const str = &str_cpy;
+
+    // TODO: Check that this didn't include `.lerp`
+    const ColorName = std.meta.DeclEnum(Color);
+    const Keyword = enum {
+        @"align",
+        bg,
+        border,
+        bottom,
+        cursor,
+        dir,
+        gap,
+        h,
+        id,
+        left,
+        max,
+        min,
+        p,
+        relative,
+        right,
+        rounded,
+        top,
+        w,
+        z,
+    };
+
+    while (str.len > 0) {
+        const idx = std.mem.indexOfNone(u8, str, std.ascii.whitespace) orelse break;
+        str = str[idx..];
+
+        const kw = matchEnum(str, Keyword) orelse break;
+        const negative = match(str, '-');
+
+        switch (kw) {
+            .id => {
+                expect(str, '[', "expected '[' after 'id-'");
+                const global = match(str, '#');
+                const id = until(str, ']', "missing closing ']' after 'id-'");
+
+                const seed: u32 = 0; // FIXME
+                var hash = std.hash.Wyhash.init(0);
+                if (!global) hash.update(std.mem.asBytes(&seed));
+                hash.update(id);
+                conf.id = @intCast(hash.final());
+            },
+            .p => {
+                const side = matchEnum(str, enum { t, b, l, r, x, y });
+                expect(str, '-', "expected '-' after 'p'");
+
+                const rem = parseNumber(str) orelse @panic("expected padding size");
+                const px: u16 = switch (match(str, "px")) {
+                    false => @intFromFloat(rem.num * rem_to_px),
+                    true => if (rem.is_int) @intFromFloat(rem.num) else @panic("'px' size must be integral"),
+                };
+                conf.padding = switch (side) {
+                    .t => .{ .top = px },
+                    .l => .{ .left = px },
+                    .r => .{ .right = px },
+                    .b => .{ .bottom = px },
+                    .x => .{ .left = px, .right = px },
+                    .y => .{ .top = px, .bottom = px },
+                    null => .{ .top = px, .left = px, .right = px, .bottom = px },
+                };
+            },
+            .bg => {
+                expect(str, '-', "expected '-' after 'bg'");
+                const color = matchEnum(str, ColorName) orelse @panic("expected color name after 'bg-'");
+                conf.border.color = @field(Color, @tagName(color));
+            },
+            .rounded => {
+                expect(str, '-', "expected '-' after 'rounded'");
+                const side = matchEnum(str, enum { b, t, l, r, bl, br, tl, tr });
+
+                if (side) expect(str, '-', "expected '-' after 'rounded-..'");
+                const Size = enum { xs, sm, md, lg, xl, xl2, xl3, xl4, full };
+                const size = matchEnum(str, Size) orelse @panic("expected size after 'rounded-'");
+                const sz = 4; // FIXME: convert size enum to number
+
+                conf.rounding = switch (side) {
+                    .tl => .{ .top_left = sz },
+                    .tr => .{ .top_right = sz },
+                    .bl => .{ .bottom_left = sz },
+                    .br => .{ .bottom_right = sz },
+                    .t => .{ .top_left = sz, .top_right = sz },
+                    .l => .{ .top_left = sz, .bottom_left = sz },
+                    .r => .{ .top_right = sz, .bottom_right = sz },
+                    .b => .{ .bottom_left = sz, .bottom_right = sz },
+                    null => .{ .top_left = sz, .top_right = sz, .bottom_left = sz, .bottom_right = sz },
+                };
+            },
+            .dir => {
+                expect(str, '-', "expected '-' after 'dir'");
+                conf.direction = matchEnum(str, LayoutDirection) orelse
+                    @panic("expected direction after 'dir-'");
+            },
+            .border => {
+                expect(str, '-', "expected '-' after 'border'");
+                if (parseNumber(str)) |width| {
+                    if (width.is_int) {
+                        conf.border.width = @intFromFloat(width.num);
+                    } else @panic("border width must be integral");
+                } else {
+                    const color = matchEnum(str, ColorName) orelse @panic("expected color name or width after 'border-'");
+                    conf.border.color = @field(Color, @tagName(color));
+                }
+            },
+            .w => conf.width.size = sizingHelper(str, rem_to_px),
+            .h => conf.height.size = sizingHelper(str, rem_to_px),
+            .min => {
+                expect(str, '-', "expected '-' after 'min'");
+                const axis = matchEnum(str, enum { w, h });
+                switch (axis) {
+                    .w => conf.width.min = sizingHelper(str, rem_to_px),
+                    .h => conf.height.min = sizingHelper(str, rem_to_px),
+                    null => @panic("expected 'w' or 'h' after 'min-'"),
+                }
+            },
+            .max => {
+                expect(str, '-', "expected '-' after 'max'");
+                const axis = matchEnum(str, enum { w, h });
+                switch (axis) {
+                    .w => conf.width.max = sizingHelper(str, rem_to_px),
+                    .h => conf.height.max = sizingHelper(str, rem_to_px),
+                    null => @panic("expected 'w' or 'h' after 'max-'"),
+                }
+            },
+            .@"align" => {
+                expect(str, '-', "expected '-' after 'align'");
+                const Edge = enum { top, bottom, left, right };
+                const Abrv = enum { t, b, l, r, tl, tr, bl, br };
+                const Corner = enum { @"top-left", @"top-right", @"bottom-left", @"bottom-right" };
+
+                if (match(str, "center")) {
+                    conf.child_alignment = .center;
+                } else if (matchEnum(str, Corner)) |corner| {
+                    conf.child_alignment = switch (corner) {
+                        .@"top-left" => .top_left,
+                        .@"top-right" => .top_right,
+                        .@"bottom-left" => .bottom_left,
+                        .@"bottom-right" => .bottom_right,
+                    };
+                } else if (matchEnum(str, Edge)) |edge| {
+                    conf.child_alignment = switch (edge) {
+                        .top => .top_center,
+                        .left => .center_left,
+                        .right => .center_right,
+                        .bottom => .bottom_center,
+                    };
+                } else {
+                    const corner = matchEnum(str, Abrv) orelse @panic("expected edge specifier after 'align-'");
+                    conf.child_alignment = switch (corner) {
+                        .t => .top_center,
+                        .l => .center_left,
+                        .r => .center_right,
+                        .b => .bottom_center,
+                        .tl => .top_left,
+                        .tr => .top_right,
+                        .bl => .bottom_left,
+                        .br => .bottom_right,
+                    };
+                }
+            },
+            .gap => {
+                expect(str, '-', "expected '-' after 'gap'");
+                const size = parseNumber(str) orelse @panic("expected number after 'gap-'");
+                const unit = matchEnum(str, enum { px, rem }) orelse .rem;
+                switch (unit) {
+                    .px => {
+                        if (!size.is_int) @panic("'px' size must be integral");
+                        conf.child_gap = @intFromFloat(size.num);
+                    },
+                    .rem => conf.child_gap = @intFromFloat(size.num * rem_to_px),
+                }
+            },
+            .z => {
+                expect(str, '-', "expected '-' after 'z'");
+                const z_idx = parseNumber(str) orelse @panic("expected number after 'z-'");
+                if (!z_idx.is_int) @panic("z index must be integral");
+                conf.floating.z_idx = @intFromFloat(z_idx.num);
+            },
+            .cursor => {
+                expect(str, '-', "expected '-' after 'cursor'");
+                const ResizeAxis = enum { t, b, l, r, tr, tl, br, bl, x, y, tlbr, trbl };
+                const Shape = enum {
+                    default,
+                    pointer,
+                    help,
+                    wait,
+                    text,
+                    move,
+                    grab,
+                    grabbing,
+                    progress,
+                    crosshair,
+                    @"no-drop",
+                    @"all-scroll",
+                    @"not-allowed",
+                };
+
+                if (match(str, "resize")) {
+                    expect(str, '-', "expected '-' after 'cursor-resize'");
+                    const axis = matchEnum(str, ResizeAxis) orelse @panic("invalid 'cursor-resize-' axis");
+                    conf.cursor_shape = switch (axis) {
+                        .t => .resize_t,
+                        .b => .resize_b,
+                        .l => .resize_l,
+                        .r => .resize_r,
+                        .x => .resize_x,
+                        .y => .resize_y,
+                        .tl => .resize_tl,
+                        .tr => .resize_tr,
+                        .bl => .resize_bl,
+                        .br => .resize_br,
+                        .tlbr => .resize_tlbr,
+                        .trbl => .resize_trbl,
+                    };
+                } else {
+                    const shape = matchEnum(str, Shape) orelse @panic("invalid cursor shape after 'cursor-'");
+                    conf.cursor_shape = switch (shape) {
+                        .default => .default,
+                        .pointer => .pointer,
+                        .help => .help,
+                        .wait => .wait,
+                        .text => .text,
+                        .move => .move,
+                        .grab => .grab,
+                        .grabbing => .grabbing,
+                        .progress => .progress,
+                        .crosshair => .crosshair,
+                        .@"no-drop" => .no_drop,
+                        .@"all-scroll" => .all_scroll,
+                        .@"not-allowed" => .not_allowed,
+                    };
+                }
+            },
+            .top => {
+                expect(str, '-', "expected '-' after 'top'");
+                const offset = parseNumber(str) orelse @panic("expected number after 'top-'");
+                const unit = matchEnum(str, enum { rem, px }) orelse .rem;
+                const sign = if (negative) -1.0 else 1.0;
+
+                conf.floating.attach_points.element = .top_center; // FIXME: these should stack
+                // TODO: To fix this, I should parse the string into a `StyleDesc` struct which mirrors
+                // the tailwind classes and is then validated when created by either tailwind or struct
+                // initializer by `ui.style(.{})`
+                switch (unit) {
+                    .rem => {
+                        conf.floating.offset.y = @intFromFloat(offset.num * rem_to_px * sign);
+                        const foo = @src();
+                    },
+                    .px => {
+                        if (!offset.is_int) @panic("'px' offset must be integral");
+                        conf.floating.offset.y = @intFromFloat(offset.num * sign);
+                    },
+                }
+            },
+        }
+
+        if (negative) switch (kw) {
+            .@"align", .bg, .border, .cursor, .dir, .gap, .h, .id, .max, .min, .relative, .rounded, .w, .z => {
+                @panic("'" ++ @tagName(kw) ++ "' cannot have a negative value");
+            },
+        };
+    }
+    return conf;
+}
+
+fn sizingHelper(str: *[]const u8, rem_to_px: f32) SizingKind {
+    expect(str, '-', "expected '-' after 'w/h'");
+    if (match(str, "fit")) return .fit;
+    if (match(str, "grow")) return .grow;
+
+    const Unit = enum { rem, px, fr };
+    const size = parseNumber(str) orelse @panic("expected number after 'w/h-'");
+    const unit = matchEnum(str, Unit) orelse .rem;
+
+    switch (unit) {
+        .rem => return .{ .fixed = @intFromFloat(size.num * rem_to_px) },
+        .fr => return .{ .fraction = size.num },
+        .px => {
+            if (!size.is_int) @panic("'px' height should be integral");
+            return .{ .fixed = @intFromFloat(size.num) };
+        },
+    }
+}
+
+// TODO: make this generic over strings or chars
+fn match(str: *[]const u8, ch: u8) bool {
+    if (str[0] == ch) {
+        str.* = str[1..];
+        return true;
+    }
+    return false;
+}
+
+fn expect(str: *[]const u8, ch: u8, msg: []const u8) void {
+    if (!match(str, ch)) @panic(msg);
+}
+
+fn until(str: *[]const u8, ch: u8, msg: []const u8) []const u8 {
+    const idx = std.mem.indexOfScalar(u8, str.*, ch) orelse @panic(msg);
+    defer str.* = str[idx + 1 ..];
+    return str[0..idx];
+}
+
+// PERF: Change search from linear to binary
+fn matchEnum(str: *[]const u8, comptime T: type) ?T {
+    const names = std.meta.fieldNames(T);
+    for (names, 0..) |name, i| {
+        if (std.mem.startsWith(u8, str.*, name)) {
+            return @enumFromInt(i);
+        }
+    }
+    return null;
+}
+
+const ParseNumberResult = struct {
+    num: f64,
+    is_int: bool = true,
+};
+
+fn parseNumber(str: *[]const u8) ?ParseNumberResult {
+    // TODO:
 }

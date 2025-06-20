@@ -25,7 +25,7 @@ pub fn main() !void {
                 nt.text("Clocks", text_title);
             });
             nt.node("id-[right-controls] w-1fr")({
-                nt.node("id-[main-menu-button] min-16 bg-transparent rounded-md py-1 px-4")({
+                nt.node("id-[main-menu-button] min-16 rounded-md py-1 px-4")({
                     if (hoverDelay(300)) {
                         nt.node("relative-bottom -top-1 rounded-md border-1 py-2 px-4")({
                             nt.style(.{ .bg = black_trans, .border_color = light_gray0 });
