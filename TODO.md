@@ -25,13 +25,13 @@
 * width:                w-fit (default)
                         w-grow
                         w-{n}[px, fr]
-                        min-w-{n}[px, fr??]
-                        max-w-{n}[px, fr??]
+                        min-w-{n}[px]
+                        max-w-{n}[px]
 * height:               h-fit
                         h-grow
                         h-{n}[px, fr]
-                        min-h-{n}[px, fr??]
-                        max-h-{n}[px, fr??]
+                        min-h-{n}[px]
+                        max-h-{n}[px]
 * alignment:            align-[center(default), left, right, top, bottom]
                         align-[t, b, l, r, tl, tr, bl, br]
                         align-[top-left, top-right, bottom-left, bottom-right]

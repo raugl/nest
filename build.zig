@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("tutorial/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
     const unit_tests = b.addTest(.{
         .root_module = exe_mod,
     });
-    const run_unit_tests = b.addRunArtifact(unit_tests);
+    const test_cmd = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_unit_tests.step);
+    test_step.dependOn(&test_cmd.step);
 }
