@@ -154,6 +154,31 @@ const wx = struct {
         return ui.closeElement;
     }
 
+    fn modalThrowAway(open: *bool) void {
+        if (open.*) {
+            ui.node(.{ .relative = .root, .size = .grow, .bg = .gray_500.alpha(0.33) })();
+
+            // ui.node("dir-col relative-root center max-w-40% max-h-40% parent-root rounded-md shadow-xl")({
+            ui.node(.{ .dir = .col, .relative = .root, .max_size = .precent(40), .parent = .root, .rounded = .md, .shadow = .xl })({
+                ui.node("dir-row py-2 px-4 gap-4 align-top")({
+                    ui.node("rounded-full bg-rose-300 w-32 h-32")({
+                        ui.text("", .{ .color = .red_700 });
+                    });
+                    ui.node("dir-col gap-2")({
+                        ui.text("Deactive account", text_heading);
+                        ui.text("Are you sure you want to deactivate your account? All of your data " ++
+                            "will be permanently removed. This action cannot be undone.", text_content);
+                    });
+                });
+                ui.node("dir-row bg-gray-200 py-2 px-4 w-grow gap-2")({
+                    ui.node("grow")();
+                    if (wx.buttonNorm("Cancel")) open.* = false;
+                    if (wx.buttonRed("Deactivate")) open.* = false;
+                });
+            });
+        }
+    }
+
     // TODO:
     fn modal(open: *bool) void {
         if (open.*) {
