@@ -53,11 +53,92 @@ pub fn main() !void {
     });
 }
 
+fn renderDay() !void {
+    for (meals) |meal| {
+        wx.collapsingHeader(meal.name)({
+            try renderMealTable(meal.rows);
+        });
+    }
+}
+
+fn renderMealTable(rows: []Row) !void {
+    // Allow two or more grids to be 'synced' with each other. They are different elements with their
+    // own properties, but they all participate in a single sizing resolution. They could use the same
+    // id, or use 'sync-[meta-table-id]'
+    // TODO: Add 'Add food' button
+
+    ui.node("id-[table]")({
+        const TableData = struct {
+            order: [6]u8 = .{ 0, 1, 2, 3, 4, 5 },
+            widths: [6]?f32 = @splat(null),
+        };
+        const self = ui.persist(TableData, .{});
+        const header_names = [_][]const u8{ "Name", "Protein", "Carbo", "Fat", "Energy", "Weight" };
+
+        // TODO: Add column sorting
+        // const sort_ctx = Row.SortCtx{ .col = 0 };
+        // std.mem.sort(Row, rows, sort_ctx, Row.lessThan);
+
+        ui.node("id-[table-header] dir-col bg-gray-300 rounded-t-md border-all-1 border-slate-700 sync-[table-grid]")({
+            // TODO: Draw shadow
+
+            for (self.order) |idx| {
+                ui.node("px-2 py-1 align-left")({
+                    self.widths[idx] = self.widths[idx] orelse ui.prevRect().w;
+                    ui.style(.{ .w = self.widths[idx] });
+
+                    ui.text(header_names[idx], text_header);
+                    // TODO: Add column reordering
+                    // TODO: Add column resizing
+                });
+            }
+        });
+
+        // name | protein | carbo | fat | energy | weight | remove button
+        wx.scroll(.vertical)({
+            ui.node("id-[table-body] dir-col sync-[table-grid]")({
+                for (rows) |*row| {
+                    const info = db.get(row.food_id);
+
+                    wx.dropdown();
+
+                    dragFoodValue(row, info, 0);
+                    dragFoodValue(row, info, 1);
+                    dragFoodValue(row, info, 2);
+                    dragFoodValue(row, info, 3);
+                    dragFoodValue(row, info, 4);
+
+                    // TODO: Figure out if I want it inside or outside the table
+                    // TODO: delete button
+                    ui.node("p-2 rounded-sm")({});
+                }
+            });
+        });
+
+        ui.node("id-[summary-footer] dir-col sync-[table-grid]")({
+            // TODO
+        });
+    });
+}
+
 const Row = struct {
     food_id: u32 = 0,
     /// protein | carbo | fat | energy | weight
     /// Expressed in absolute weights
     values: [5]f32 = @splat(1),
+
+    const SortCtx = struct {
+        col: u8,
+        asc: bool = true,
+    };
+
+    fn lessThan(ctx: SortCtx, a: Row, b: Row) bool {
+        const ord = std.math.order(a.values[ctx.col], b.values[ctx.col]);
+        if (ctx.asc) {
+            return ord == .lt;
+        }
+        return ord == .gt;
+    }
 };
 
 const FoodInfo = struct {
@@ -66,42 +147,6 @@ const FoodInfo = struct {
     /// Expressed in relative weights
     values: [5]f32 = @splat(1),
 };
-
-fn renderFoodTable() !void {
-    const widths = ui.persist([6]f32, @splat(200 * px));
-
-    // Allow two or more grids to be 'synced' with each other. They are different elements with their
-    // own properties, but they all participate in a single sizing resolution. They could use the same
-    // id, or use 'sync-[meta-table-id]'
-    // TODO: Sticky headers are currently impossible
-
-    ui.node("id-[table-grid]")({
-        ui.node("id-[header] dir-col sync-[table-grid] px-2 py-1 rounded-t-md border-all-1 border-slate-700 bg-gray-300 shadow-md")({
-            //
-        });
-    });
-
-    ui.node("dir-grid col-gap-4 row-gap-2 rounded-md border-all-2 border-slate-400 cols-[repeat(6, grow) fit]")({
-        // TODO: header
-        // name | protein | carbo | fat | energy | weight | remove button
-
-        for (rows) |row| {
-            const info = db.get(row.food_id);
-
-            wx.dropdown();
-
-            dragFoodValue(row, info, 0);
-            dragFoodValue(row, info, 1);
-            dragFoodValue(row, info, 2);
-            dragFoodValue(row, info, 3);
-            dragFoodValue(row, info, 4);
-
-            ui.node("p-2 rounded-sm")({
-                // TODO: delete button
-            });
-        }
-    });
-}
 
 fn dragFoodValue(row: *Row, info: FoodInfo, idx: u32) void {
     if (wx.dragValue(f32, &row.values[idx], 0.5)) {
@@ -241,7 +286,9 @@ const wx = struct {
 
     var text_buf: [128]u8 = undefined;
 
-    fn dragValue(comptime T: type, value: *T, step: T) void {
+    fn dragValue(comptime T: type, value: *T, step: T) bool {
+        var changed = false;
+
         ui.node("align-center px-2 py-0.5")({
             const Mode = enum { drag, text };
             const mode = ui.persist(Mode, .drag);
@@ -262,13 +309,18 @@ const wx = struct {
                     const delta = ui.input().cursor_delta;
                     value.* += (delta.x - delta.y) * step;
                 }
+                changed |= ui.input().drop;
                 std.fmt.bufPrint(&text_buf, "{d}°", value.*);
                 ui.text(&text_buf, .{ .color = color });
             } else {
-                if (ui.input().press(.escape) or ui.input().press(.enter)) mode = .drag;
+                if (ui.input().press(.escape) or ui.input().press(.enter)) {
+                    mode = .drag;
+                }
+                changed |= input.press(.enter);
                 // TODO: implement text input
             }
         });
+        return changed;
     }
 };
 
